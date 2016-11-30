@@ -257,6 +257,7 @@ type Conn struct {
 	sending sync.Mutex
 
 	disconnect chan struct{}
+	close      chan struct{}
 
 	// Set by ConnOpt funcs.
 	onRecv func(*Request, *Response)
@@ -283,6 +284,7 @@ func NewConn(ctx context.Context, conn io.ReadWriteCloser, h Handler, opt ...Con
 		h:          h,
 		pending:    map[ID]*call{},
 		disconnect: make(chan struct{}),
+		close:      make(chan struct{}),
 	}
 	for _, opt := range opt {
 		opt(c)
@@ -295,6 +297,7 @@ func NewConn(ctx context.Context, conn io.ReadWriteCloser, h Handler, opt ...Con
 // used after it has been closed.
 func (c *Conn) Close() error {
 	c.mu.Lock()
+	close(c.close)
 	if c.shutdown || c.closing {
 		c.mu.Unlock()
 		return ErrClosed
@@ -429,6 +432,11 @@ func (c *Conn) SendResponse(ctx context.Context, resp *Response) error {
 // underlying connection is disconnected.
 func (c *Conn) DisconnectNotify() <-chan struct{} {
 	return c.disconnect
+}
+
+// CloseNotify returns a channel that is closed when connection is closed.
+func (c *Conn) CloseNotify() <-chan struct{} {
+	return c.close
 }
 
 func (c *Conn) readMessages(ctx context.Context, r *bufio.Reader) {
